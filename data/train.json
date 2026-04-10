@@ -1,0 +1,32 @@
+[
+    {
+        "videos": [
+            "videos/train_0/0.mp4"
+        ],
+        "conversations": [
+            {
+                "from": "human",
+                "value": "<video>\nSuppose you are an expert in judging and evaluating the quality of AI-generated videos.\nPlease watch the frames of a given video.\nEvaluate the video according to the following three dimensions.\n\n[Visual Quality]\nAssess the video in terms of:\nVideo Quality: whether the video is free from major visual defects, including blur, lack of detail, poor texture, lighting issues, color distortion, flickering, and overexposure.\n\n[Motion & Physical Consistency]\nAssess the video in terms of:\nSubject Movement: whether the subject's motion is natural, smooth, and physically realistic.\nPhysical Interaction: whether interactions among subjects and/or objects are physically plausible.\nCause-Effect: whether causal relationships are correctly depicted.\n\n[Prompt Alignment]\nTextual prompt: A white teenage boy stands barefoot in front of a full-length mirror, holding a t-shirt and jeans against his chest with a sleepy expression as sunlight streams in..\nAssess whether the video is well-aligned with the textual prompt in terms of:\nSubject Existence: whether the subject described in the prompt appears and is accurate.\nObject Existence: whether the object described in the prompt appears and is accurate.\nSubject-Object Interaction: whether the interaction described in the prompt is correctly represented.\n\nProvide your reasoning, then output \"Yes\" or \"No\".\n"
+            },
+            {
+                "from": "gpt",
+                "value": "\n<think>\n[Visual Quality]: Good [Motion & Physical Consistency]: The movement appears stiff and non-sense and distorted. The reflection at <region>[168, 289, 516, 993]</region> also does not match as the way the boy at <region>[497, 162, 998, 998]</region> touches and interacts with the shirt. [Prompt Alignment]: He is not holding the jeans at <region>[513, 764, 996, 998]</region> on his chest. The movement appears stiff and non-sense and distorted. The reflection also does not match as the way the boy touches and interacts with the shirt.\n</think>\n<answer>\nVideo Quality: Yes. Subject Movement: No. Physical Interaction: No. Cause-Effect: Yes. Subject Existence: Yes. Object Existence: Yes. Subject-Object Interaction: No.\n</answer>\n"
+            }
+        ]
+    },
+    {
+        "videos": [
+            "videos/train_0/9.mp4"
+        ],
+        "conversations": [
+            {
+                "from": "human",
+                "value": "<video>\nSuppose you are an expert in judging and evaluating the quality of AI-generated videos.\nPlease watch the frames of a given video.\nEvaluate the video according to the following three dimensions.\n\n[Visual Quality]\nAssess the video in terms of:\nVideo Quality: whether the video is free from major visual defects, including blur, lack of detail, poor texture, lighting issues, color distortion, flickering, and overexposure.\n\n[Motion & Physical Consistency]\nAssess the video in terms of:\nSubject Movement: whether the subject's motion is natural, smooth, and physically realistic.\nPhysical Interaction: whether interactions among subjects and/or objects are physically plausible.\nCause-Effect: whether causal relationships are correctly depicted.\n\n[Prompt Alignment]\nTextual prompt: A close-up, slow-motion shot shows a pair of hands slicing a crystal glass cherry on a stone surface. The camera focuses on the glass as it is cut, then shifts to reveal the sliced cherry rolling across the stone. Soft ambient lighting casts gentle shadows, and the camera remains steady throughout the sequence..\nAssess whether the video is well-aligned with the textual prompt in terms of:\nSubject Existence: whether the subject described in the prompt appears and is accurate.\nObject Existence: whether the object described in the prompt appears and is accurate.\nSubject-Object Interaction: whether the interaction described in the prompt is correctly represented.\n\nProvide your reasoning, then output \"Yes\" or \"No\".\n"
+            },
+            {
+                "from": "gpt",
+                "value": "\n<think>\n[Visual Quality]: Flickering issue [Motion & Physical Consistency]: Deformed hand and the cause-effect of the moving glass cherry at <region>[379, 461, 766, 698]</region> is unnatural. [Prompt Alignment]: They did not sliced glass cherry.\n</think>\n<answer>\nVideo Quality: No. Subject Movement: Yes. Physical Interaction: No. Cause-Effect: No. Subject Existence: Yes. Object Existence: Yes. Subject-Object Interaction: No.\n</answer>\n"
+            }
+        ]
+    }
+]

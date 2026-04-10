@@ -1,0 +1,176 @@
+# Tokenizer class or path. If null, it will be inferred from the model.
+tokenizer: null
+
+# Whether to use shared memory for data loading.
+use_shm: False
+
+# Training set parquet. Can be a list or a single file.
+# The program will read all files into memory, so it can't be too large (< 100GB).
+# The path can be either a local path or an HDFS path.
+# For HDFS path, we provide utils to download it to DRAM and convert it to a local path.
+train_files: ~/data/rlhf/gsm8k/train.parquet
+
+# Validation parquet. Can be a list or a single file.
+val_files: ~/data/rlhf/gsm8k/test.parquet
+
+# Maximum sample length to be used.
+# Set to -1 to use full dataset, otherwise, randomly
+# select the specified number of samples from train dataset
+train_max_samples: -1
+
+# Maximum sample length to be used.
+# Set to -1 to use full dataset, otherwise, randomly
+# select the specified number of samples from val dataset
+val_max_samples: -1
+
+# The field in the dataset where the prompt is located. Default is 'prompt'.
+prompt_key: prompt
+
+# The field used to select the reward function (if using different ones per example).
+reward_fn_key: data_source
+
+# Maximum prompt length. All prompts will be left-padded to this length.
+# An error will be reported if the length is too long.
+# oc.select: default val for rollout.prompt_length
+max_prompt_length: 512
+
+# Maximum response length. Rollout in RL algorithms (e.g. PPO) generates up to this length.
+# oc.select: default val for rollout.response_length
+max_response_length: 512
+
+# Batch size sampled for one training iteration of different RL algorithms.
+train_batch_size: 1024
+
+# Batch size used during validation. Can be null.
+val_batch_size: null
+
+# use tool config to calculate true prompt length
+tool_config_path: ${oc.select:actor_rollout_ref.rollout.multi_turn.tool_config_path, null}
+
+# Whether to return the original input_ids without adding chat template.
+# This is used when the reward model's chat template differs from the policy.
+# If using a model-based RM with different templates, this should be True.
+return_raw_input_ids: False
+
+# Whether to return the original chat (prompt) without applying chat template.
+return_raw_chat: True
+
+# Whether to return the full prompt with chat template.
+return_full_prompt: False
+
+# Whether to shuffle the data in the dataloader.
+shuffle: True
+
+# Seed to use when shuffling the data
+seed: null
+
+# num dataloader workers
+dataloader_num_workers: 8
+
+# image patch size
+image_patch_size: 14
+
+# Whether to shuffle the validation set.
+validation_shuffle: False
+
+# Whether to filter overlong prompts.
+filter_overlong_prompts: False
+
+# Number of workers for filtering overlong prompts.
+# For large-scale datasets, filtering can be time-consuming.
+# Use multiprocessing to speed up. Default is 1.
+filter_overlong_prompts_workers: 1
+
+# Truncate the input_ids or prompt if they exceed max_prompt_length.
+# Options: 'error', 'left', 'right', 'middle'. Default is 'error'.
+truncation: error
+
+# The field in the multi-modal dataset where the image is located. Default is 'images'.
+image_key: images
+
+# The field in the multi-modal dataset where the video is located.
+video_key: videos
+
+# Optional system prompt override used by custom datasets such as VideoO3.
+system_prompt: null
+
+# Whether to use 3D RoPE position ids for video inputs when supported by the processor.
+use_3drope: True
+
+# Base directory for resolving relative media paths in custom multimodal datasets.
+base_media_dir: null
+
+# The field containing the answer/solution payload for custom datasets.
+answer_key: null
+
+# Default fps used to sample overview frames from videos when the row does not specify one.
+overview_fps: 2.0
+
+# Default source fps metadata for videos when the row does not specify one.
+source_frames_fps: 4.0
+
+# Maximum visual token budget used by custom video datasets and rollouts.
+max_pixels: 16384
+
+# Minimum visual token budget used by custom video datasets and rollouts.
+min_pixels: 512
+
+# Optional tool-call mode propagated to legacy async multi-turn rollouts.
+tool_call: null
+
+# Reward weight attached to accuracy-based scoring in custom video workflows.
+acc_reward_weight: 1.0
+
+# Reward weight attached to formatting-based scoring in custom video workflows.
+format_reward_weight: 1.0
+
+# Reward weight attached to tool-usage scoring in custom video workflows.
+use_tool_reward_weight: 0.0
+
+# Penalty weight applied to extra tool-calling rounds in custom video workflows.
+decay_penalty_weight: 0.0
+
+# Whether answer extraction should use GPT-assisted parsing in custom workflows.
+gpt_extract_answer: False
+
+# Optional answer-tag extraction mode for custom workflows.
+extract_answer_tags: null
+
+# If the remote tokenizer has a Python file, this flag determines whether to allow using it.
+trust_remote_code: False
+
+# Optional: specify a custom dataset class path and name if overriding default loading behavior.
+custom_cls:
+
+  # The path to the file containing your customized dataset class. If not specified, pre-implemented dataset will be used.
+  path: null
+
+  # The name of the dataset class within the specified file.
+  name: null
+
+# Whether to return multi-modal inputs in the dataset. Set to False if rollout generates new multi-modal inputs.
+return_multi_modal_inputs: True
+
+# settings related to data sampler
+sampler:
+
+  # the path to the module containing a curriculum class which implements the
+  # AbstractSampler interface
+  class_path: null
+
+  # the name of the curriculum class like `MySampler`
+  class_name: null
+
+# Data generation configuration for augmenting the dataset.
+datagen:
+
+  # The path to the file containing your customized data generation class.
+  # E.g. 'pkg://verl.experimental.dynamic_dataset.dynamicgen_dataset'
+  path: null
+
+  # The class name of the data generation class within the specified file.
+  # E.g. 'MockDataGenerator'
+  name: null
+
+# Additional kwargs when calling tokenizer.apply_chat_template
+apply_chat_template_kwargs: {}
