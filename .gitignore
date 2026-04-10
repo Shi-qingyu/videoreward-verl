@@ -3,6 +3,7 @@ wandb/
 .cache/
 ckpts/
 verl_tool/
+data/
 
 __pycache__/
 **/__pycache__/

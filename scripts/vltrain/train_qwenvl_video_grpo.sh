@@ -4,9 +4,9 @@ set -euxo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 verl_root="${repo_root}/verl"
 
-MODEL_PATH="${MODEL_PATH:-Qwen/Qwen3-VL-4B-Instruct}"
-TRAIN_FILE="${TRAIN_FILE:-${repo_root}/data/train.json}"
-EVAL_FILE="${EVAL_FILE:-${repo_root}/data/train.json}"
+MODEL_PATH="${MODEL_PATH:-Qwen/Qwen3-VL-2B-Instruct}"
+TRAIN_FILE="${TRAIN_FILE:-${repo_root}/data/train_region.json}"
+EVAL_FILE="${EVAL_FILE:-${repo_root}/data/train_region.json}"
 
 PROJECT_NAME="${PROJECT_NAME:-qwenvl-video-verl}"
 EXP_NAME="${EXP_NAME:-grpo-local}"
