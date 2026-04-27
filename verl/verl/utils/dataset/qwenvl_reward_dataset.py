@@ -117,7 +117,7 @@ def _build_time_instruction(video_tensor: torch.Tensor, sample_fps: float) -> st
     )
 
 
-class QwenVLVideoRLDataset(Dataset):
+class QwenVLRewardDataset(Dataset):
     def __init__(self, data_files, tokenizer, processor, config, max_samples: int = -1):
         self.data_files = _ensure_list(data_files)
         self.tokenizer = tokenizer
@@ -213,9 +213,22 @@ class QwenVLVideoRLDataset(Dataset):
             raw_video_tensors.append(raw_video_tensor)
             raw_sample_fps_list.append(float(raw_sample_fps))
 
-        multi_modal_data = {"video": processed_videos}
+        video_items = []
+        for video_tensor, sample_fps in zip(processed_videos, sample_fps_list, strict=False):
+            num_frames = int(video_tensor.shape[0])
+            metadata = {
+                "fps": float(sample_fps),
+                "duration": num_frames / max(float(sample_fps), 1e-6),
+                "total_num_frames": num_frames,
+                "frames_indices": list(range(num_frames)),
+                "video_backend": "opencv",
+                "do_sample_frames": False,
+            }
+            video_items.append((video_tensor, metadata))
+
+        multi_modal_data = {"video": video_items}
         video_fps_used = {"fps": sample_fps_list}
-        video_inputs = self.processor.video_processor(multi_modal_data["video"])
+        video_inputs = self.processor.video_processor(processed_videos)
         video_grid_thw = video_inputs.get("video_grid_thw")
         merge_length = self.processor.video_processor.merge_size**2
 
@@ -293,6 +306,9 @@ class QwenVLVideoRLDataset(Dataset):
             "multi_modal_inputs": dict(video_inputs),
             "raw_prompt": prompt_messages if self.return_raw_chat else raw_prompt,
             "ground_truth": row["ground_truth"],
+            "reward_model": {
+                "ground_truth": row["ground_truth"],
+            },
             "data_source": row.get("source", "qwenvl_video_grpo"),
             "uid": uid,
             "index": uid,

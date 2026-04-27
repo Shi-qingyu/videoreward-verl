@@ -1,4 +1,4 @@
-outputs/
+output/
 wandb/
 .cache/
 ckpts/

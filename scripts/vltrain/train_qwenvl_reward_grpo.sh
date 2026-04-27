@@ -3,32 +3,44 @@ set -euxo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 verl_root="${repo_root}/verl"
+log_dir="${repo_root}/logs"
+mkdir -p "${log_dir}"
+log_file="${LOG_FILE:-${log_dir}/train_qwenvl_reward_grpo.log}"
 
-MODEL_PATH="${MODEL_PATH:-Qwen/Qwen3-VL-2B-Instruct}"
-TRAIN_FILE="${TRAIN_FILE:-${repo_root}/data/train_region.json}"
-EVAL_FILE="${EVAL_FILE:-${repo_root}/data/train_region.json}"
+exec > >(tee -a "${log_file}") 2>&1
 
-PROJECT_NAME="${PROJECT_NAME:-qwenvl-video-verl}"
-EXP_NAME="${EXP_NAME:-grpo-local}"
+MODEL_PATH="${MODEL_PATH:-${repo_root}/output/qwen3vl-2b-baseline-1e-bs4-ga4-box-t-polished-v3-single-457}"
+TRAIN_FILE="${TRAIN_FILE:-${repo_root}/data/train_box_t_polished_v3.json}"
+EVAL_FILE="${EVAL_FILE:-${repo_root}/data/train_box_t_polished_v3.json}"
+
+PROJECT_NAME="${PROJECT_NAME:-qwenvl-reward}"
+EXP_NAME="${EXP_NAME:-qwenvl-reward-grpo-local}"
 CKPT_DIR="${CKPT_DIR:-${repo_root}/ckpts/${PROJECT_NAME}/${EXP_NAME}}"
 ROLLOUT_DIR="${ROLLOUT_DIR:-${repo_root}/.cache/${PROJECT_NAME}/${EXP_NAME}/rollout}"
 VAL_DIR="${VAL_DIR:-${repo_root}/.cache/${PROJECT_NAME}/${EXP_NAME}/val}"
 
-MAX_PROMPT_LENGTH="${MAX_PROMPT_LENGTH:-8192}"
+MAX_PROMPT_LENGTH="${MAX_PROMPT_LENGTH:-4096}"
 MAX_RESPONSE_LENGTH="${MAX_RESPONSE_LENGTH:-1024}"
-TRAIN_BATCH_SIZE="${TRAIN_BATCH_SIZE:-2}"
-PPO_MINI_BATCH_SIZE="${PPO_MINI_BATCH_SIZE:-1}"
-ROLLOUT_N="${ROLLOUT_N:-4}"
+TRAIN_BATCH_SIZE="${TRAIN_BATCH_SIZE:-32}"
+PPO_MINI_BATCH_SIZE="${PPO_MINI_BATCH_SIZE:-8}"
+ROLLOUT_N="${ROLLOUT_N:-8}"
 
-TRAIN_GPUS="${TRAIN_GPUS:-1}"
+TRAIN_GPUS="${TRAIN_GPUS:-8}"
 NNODES="${NNODES:-1}"
+GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.75}"
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-128}"
+ENABLE_ACTIVATION_OFFLOAD="${ENABLE_ACTIVATION_OFFLOAD:-True}"
+PARAM_OFFLOAD="${PARAM_OFFLOAD:-False}"
+OPTIMIZER_OFFLOAD="${OPTIMIZER_OFFLOAD:-True}"
 
 ACC_REWARD_WEIGHT="${ACC_REWARD_WEIGHT:-1.0}"
 FORMAT_REWARD_WEIGHT="${FORMAT_REWARD_WEIGHT:-1.0}"
 IOU_REWARD_WEIGHT="${IOU_REWARD_WEIGHT:-1.0}"
 
-CUSTOM_DATASET_PATH="${repo_root}/verl/verl/utils/dataset/qwenvl_video_rl_dataset.py"
-CUSTOM_REWARD_PATH="${repo_root}/verl/verl/utils/reward_score/qwenvl_video_grpo_reward.py"
+CUSTOM_DATASET_PATH="${repo_root}/verl/verl/utils/dataset/qwenvl_reward_dataset_v2.py"
+CUSTOM_DATASET_NAME="QwenVLRewardDataset"
+CUSTOM_REWARD_PATH="${repo_root}/verl/verl/utils/reward_score/qwenvl_reward_grpo_reward.py"
+CUSTOM_REWARD_NAME="compute_score"
 
 cd "${verl_root}"
 
@@ -37,21 +49,30 @@ python3 -u -m verl.trainer.main_ppo \
     data.val_files="['${EVAL_FILE}']" \
     data.max_prompt_length=${MAX_PROMPT_LENGTH} \
     data.max_response_length=${MAX_RESPONSE_LENGTH} \
+    data.max_pixels=512 \
+    data.min_pixels=256 \
     data.train_batch_size=${TRAIN_BATCH_SIZE} \
     data.prompt_key=prompt \
     data.return_raw_chat=True \
     data.filter_overlong_prompts=False \
     data.custom_cls.path="${CUSTOM_DATASET_PATH}" \
-    data.custom_cls.name=QwenVLVideoRLDataset \
+    data.custom_cls.name="${CUSTOM_DATASET_NAME}" \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
+    actor_rollout_ref.model.enable_activation_offload=${ENABLE_ACTIVATION_OFFLOAD} \
     actor_rollout_ref.actor.strategy=fsdp2 \
     actor_rollout_ref.ref.strategy=fsdp2 \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=-1 \
+    actor_rollout_ref.actor.fsdp_config.param_offload=${PARAM_OFFLOAD} \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=${OPTIMIZER_OFFLOAD} \
+    actor_rollout_ref.ref.fsdp_config.param_offload=${PARAM_OFFLOAD} \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.mode=sync \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=${GPU_MEMORY_UTILIZATION} \
+    actor_rollout_ref.rollout.max_num_seqs=${MAX_NUM_SEQS} \
+    actor_rollout_ref.rollout.free_cache_engine=True \
     actor_rollout_ref.rollout.n=${ROLLOUT_N} \
     actor_rollout_ref.rollout.temperature=1.0 \
     actor_rollout_ref.rollout.top_p=0.95 \
@@ -79,10 +100,10 @@ python3 -u -m verl.trainer.main_ppo \
     reward_model.reward_manager=naive \
     reward_model.launch_reward_fn_async=False \
     custom_reward_function.path="${CUSTOM_REWARD_PATH}" \
-    custom_reward_function.name=compute_score \
-    custom_reward_function.reward_kwargs.acc_weight=${ACC_REWARD_WEIGHT} \
-    custom_reward_function.reward_kwargs.format_weight=${FORMAT_REWARD_WEIGHT} \
-    custom_reward_function.reward_kwargs.iou_weight=${IOU_REWARD_WEIGHT} \
+    custom_reward_function.name="${CUSTOM_REWARD_NAME}" \
+    +custom_reward_function.reward_kwargs.acc_weight=${ACC_REWARD_WEIGHT} \
+    +custom_reward_function.reward_kwargs.format_weight=${FORMAT_REWARD_WEIGHT} \
+    +custom_reward_function.reward_kwargs.iou_weight=${IOU_REWARD_WEIGHT} \
     trainer.logger="['console']" \
     trainer.project_name="${PROJECT_NAME}" \
     trainer.experiment_name="${EXP_NAME}" \

@@ -1,0 +1,267 @@
+from __future__ import annotations
+
+import re
+import json
+from typing import List, Tuple, Dict
+from scipy.optimize import linear_sum_assignment
+
+
+EXPECTED_KEYS = [
+    "Video Quality",
+    "Subject Movement",
+    "Physical Interaction",
+    "Cause-Effect",
+    "Subject Existence",
+    "Object Existence",
+    "Subject-Object Interaction",
+]
+
+
+def normalize_label(x: str) -> str:
+    """
+    Normalize model / gt labels to a comparable canonical form.
+    """
+    if x is None:
+        return "fail"
+
+    x = str(x).strip().lower().rstrip("。").rstrip(".")
+
+    # keep only the leading semantic label when model generates extra words
+    # e.g. "yes, because ..." -> "yes"
+    #      "good alignment"   -> "good"
+    x = re.split(r"[\s,;:]+", x)[0] if x else "fail"
+
+    yes_set = {
+        "yes",
+        "good",
+        "true",
+        "correct",
+        "present",
+        "exists",
+        "aligned",
+        "match",
+        "matched",
+        "plausible",
+    }
+    no_set = {
+        "no",
+        "bad",
+        "false",
+        "incorrect",
+        "absent",
+        "missing",
+        "misaligned",
+        "mismatch",
+        "implausible",
+    }
+
+    if x in yes_set:
+        return "yes"
+    if x in no_set:
+        return "no"
+    return x if x else "fail"
+
+
+def extract_tag_content(text: str, tag: str) -> List[str]:
+    """
+    Extract content inside <tag>...</tag>. Return [""] if not found.
+    """
+    text = "" if text is None else str(text)
+    pattern = rf"<{tag}>\s*(.*?)\s*</{tag}>"
+    matches = re.findall(pattern, text, re.S | re.I)
+    return [match.strip() for match in matches] if matches else [""]
+
+
+def parse_box(box_str: str) -> List[int]:
+    """
+    Parse a box string like "[x1,y1,x2,y2]" into a list of integers [x1, y1, x2, y2].
+    """
+    return json.loads(box_str)
+
+
+def compute_iou(box1, box2):
+    """
+    Compute IoU between two boxes.
+    Box format: [x1, y1, x2, y2]
+    """
+    x1 = max(box1[0], box2[0])
+    y1 = max(box1[1], box2[1])
+    x2 = min(box1[2], box2[2])
+    y2 = min(box1[3], box2[3])
+
+    # Compute intersection area
+    inter_w = max(0.0, x2 - x1)
+    inter_h = max(0.0, y2 - y1)
+    inter_area = inter_w * inter_h
+
+    # Compute area of each box
+    box1_area = max(0.0, box1[2] - box1[0]) * max(0.0, box1[3] - box1[1])
+    box2_area = max(0.0, box2[2] - box2[0]) * max(0.0, box2[3] - box2[1])
+
+    # Compute union area
+    union_area = box1_area + box2_area - inter_area
+    if union_area <= 0:
+        return 0.0
+
+    return inter_area / union_area
+
+
+def mean_matched_iou(gt_boxes, pred_boxes):
+    """
+    Compute mean IoU after optimal bipartite matching.
+
+    The matching is solved with the Hungarian algorithm to maximize
+    total IoU between ground-truth boxes and predicted boxes.
+
+    To penalize unmatched boxes when the numbers do not match, the final
+    reward is normalized by max(len(gt_boxes), len(pred_boxes)).
+    """
+    if len(gt_boxes) == 0 and len(pred_boxes) == 0:
+        return 1.0
+    if len(gt_boxes) == 0 or len(pred_boxes) == 0:
+        return 0.0
+
+    # Build IoU matrix of shape [num_gt, num_pred]
+    iou_matrix = []
+    for gt_box in gt_boxes:
+        row = []
+        for pred_box in pred_boxes:
+            row.append(compute_iou(gt_box, pred_box))
+        iou_matrix.append(row)
+
+    # Hungarian algorithm minimizes cost, so use negative IoU as cost
+    cost_matrix = [[-iou for iou in row] for row in iou_matrix]
+    row_ind, col_ind = linear_sum_assignment(cost_matrix)
+
+    matched_ious = [iou_matrix[r][c] for r, c in zip(row_ind, col_ind)]
+
+    # Normalize by the larger number of boxes so unmatched boxes are penalized
+    reward = sum(matched_ious) / max(len(gt_boxes), len(pred_boxes))
+    return float(reward)
+
+
+def parse_answer_block(answer_text: str) -> Dict[str, str]:
+    """
+    Parse answer block into a fixed dict with EXPECTED_KEYS.
+
+    This supports both multiline and single-line formats, for example:
+
+    Video Quality: Yes
+    Subject Movement: No
+
+    or:
+
+    Video Quality: Yes. Subject Movement: No. Physical Interaction: Yes.
+
+    It extracts each key's value until the next expected key.
+    """
+    answer_text = "" if answer_text is None else str(answer_text)
+    answer_dict = {}
+
+    escaped_keys = [re.escape(k) for k in EXPECTED_KEYS]
+    key_union = "|".join(escaped_keys)
+
+    for key in EXPECTED_KEYS:
+        pattern = (
+            rf"{re.escape(key)}\s*[：:]\s*"
+            rf"(.*?)"
+            rf"\s*(?=\s*(?:{key_union})\s*[：:]|</answer>|$)"
+        )
+
+        match = re.search(pattern, answer_text, re.I | re.S)
+        if match:
+            value = match.group(1).strip()
+            value = re.sub(r"</answer>\s*$", "", value, flags=re.I).strip()
+            value = value.rstrip(".。").strip()
+            answer_dict[key] = value if value else "Fail"
+        else:
+            answer_dict[key] = "Fail"
+
+    return answer_dict
+
+
+def parse_output(text: str) -> Tuple[str, Dict[str, str]]:
+    """
+    Parse a full model output / gt string into:
+      - think_content
+      - answer_dict with fixed EXPECTED_KEYS
+    """
+    text = "" if text is None else str(text)
+
+    think_content = extract_tag_content(text, "think")[0]
+    answer_text = extract_tag_content(text, "answer")[0]
+    answer_dict = parse_answer_block(answer_text)
+
+    return think_content, answer_dict
+
+
+def acc_reward(solution_str: str, ground_truth: str) -> float:
+    _, pred_dict = parse_output(solution_str)
+    _, gt_dict = parse_output(ground_truth)
+
+    matched = 0
+    for key in EXPECTED_KEYS:
+        if normalize_label(pred_dict[key]) == normalize_label(gt_dict[key]):
+            matched += 1
+
+    return matched / len(EXPECTED_KEYS)
+
+
+def format_reward(solution_str: str) -> float:
+    pattern = r"^\s*<think>.*?</think>\s*<answer>.*?</answer>\s*$"
+    return 1.0 if re.match(pattern, "" if solution_str is None else str(solution_str), re.S | re.I) else 0.0
+
+
+def iou_reward(solution_str: str, ground_truth: str) -> float:
+    gt_boxes_raw = extract_tag_content(ground_truth, "box")
+    if gt_boxes_raw[0] == "":
+        return 1.0
+
+    pred_boxes_raw = extract_tag_content(solution_str, "box")
+    if pred_boxes_raw[0] == "":
+        return 0.0
+
+    try:
+        gt_boxes = [parse_box(box_str) for box_str in gt_boxes_raw]
+        pred_boxes = [parse_box(box_str) for box_str in pred_boxes_raw]
+    except Exception:
+        return 0.0
+
+    return mean_matched_iou(gt_boxes, pred_boxes)
+
+
+def compute_score(
+    solution_str: str,
+    ground_truth: str,
+    data_source: str = "",
+    extra_info: Dict | None = None,
+    acc_weight: float = 1.0,
+    format_weight: float = 1.0,
+    iou_weight: float = 1.0,
+):
+    del data_source, extra_info
+
+    acc = acc_reward(solution_str, ground_truth)
+    fmt = format_reward(solution_str)
+    iou = iou_reward(solution_str, ground_truth)
+    score = acc_weight * acc + format_weight * fmt + iou_weight * iou
+
+    return {
+        "score": float(score),
+        "acc_reward": float(acc),
+        "format_reward": float(fmt),
+        "iou_reward": float(iou),
+    }
+
+
+if __name__ == "__main__":
+    case_singleline = """
+    <think>
+    Some reasoning here.
+    </think>
+    <answer>
+    Video Quality: Yes. Subject Movement: Yes. Physical Interaction: No. Cause-Effect: No. Subject Existence: Yes. Object Existence: Yes. Subject-Object Interaction: No.
+    </answer>
+    """
+
+    print(parse_answer_block(extract_tag_content(case_singleline, "answer")[0]))
