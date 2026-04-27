@@ -264,10 +264,10 @@ class QwenVLRewardDataset(Dataset):
         self.config = config
         self.max_samples = max_samples
 
-        self.max_prompt_length = int(config.get("max_prompt_length", 16384))
+        self.max_prompt_length = int(config.get("max_prompt_length", 4096))
         self.truncation = config.get("truncation", "error")
-        self.max_pixels = int(config.get("max_pixels", 16384))
-        self.min_pixels = int(config.get("min_pixels", 512))
+        self.max_tokens = int(config.get("max_tokens", 2048))
+        self.min_tokens = int(config.get("min_tokens", 512))
         self.overview_fps = float(config.get("overview_fps", 2.0))
         self.source_frames_fps = float(config.get("source_frames_fps", 4.0))
         self.return_raw_chat = bool(config.get("return_raw_chat", True))
@@ -352,8 +352,8 @@ class QwenVLRewardDataset(Dataset):
         for video_path in resolved_videos:
             video_tensor, sample_fps, raw_video_tensor, raw_sample_fps = _process_video_adaptive_token_num(
                 video_path,
-                self.max_pixels,
-                self.min_pixels,
+                self.max_tokens,
+                self.min_tokens,
                 fps=float(row.get("fps", self.overview_fps)),
                 source_frames_fps=float(row.get("frame_fps", self.source_frames_fps)),
             )
