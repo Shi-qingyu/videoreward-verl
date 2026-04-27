@@ -10,6 +10,7 @@ import torch
 from omegaconf import ListConfig
 from torch.utils.data import Dataset
 
+import verl.utils.torch_functional as verl_F
 from verl.utils.model import compute_position_id_with_mask
 
 
@@ -296,10 +297,12 @@ class QwenVLRewardDataset(Dataset):
         else:
             attention_mask = torch.ones_like(input_ids, dtype=torch.long)
 
-        input_ids, attention_mask = _truncate_or_error(
-            input_ids,
-            attention_mask,
+        input_ids, attention_mask = verl_F.postprocess_data(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
             max_length=self.max_prompt_length,
+            pad_token_id=self.tokenizer.pad_token_id,
+            left_pad=True,
             truncation=self.truncation,
         )
 
@@ -317,20 +320,36 @@ class QwenVLRewardDataset(Dataset):
             else:
                 from verl.models.transformers.qwen2_vl import get_rope_index
 
-            position_ids = [
-                get_rope_index(
-                    self.processor,
-                    input_ids=input_ids[0],
-                    image_grid_thw=full_result.get("image_grid_thw"),
-                    video_grid_thw=full_video_grid_thw,
-                    second_per_grid_ts=second_per_grid_ts,
-                    attention_mask=attention_mask[0],
-                )
-            ]
+            vision_position_ids = get_rope_index(
+                self.processor,
+                input_ids=input_ids[0],
+                image_grid_thw=full_result.get("image_grid_thw"),
+                video_grid_thw=full_video_grid_thw,
+                second_per_grid_ts=second_per_grid_ts,
+                attention_mask=attention_mask[0],
+            )
+            valid_mask = attention_mask[0].bool()
+            text_position_ids = torch.ones((1, len(input_ids[0])), dtype=torch.long)
+            text_position_ids[0, valid_mask] = torch.arange(valid_mask.sum().item())
+            position_ids = [torch.cat((text_position_ids, vision_position_ids), dim=0)]
         else:
             position_ids = compute_position_id_with_mask(attention_mask)
 
         raw_prompt_ids = self.tokenizer.encode(raw_prompt, add_special_tokens=False)
+        if len(raw_prompt_ids) > self.max_prompt_length:
+            if self.truncation == "left":
+                raw_prompt_ids = raw_prompt_ids[-self.max_prompt_length :]
+            elif self.truncation == "right":
+                raw_prompt_ids = raw_prompt_ids[: self.max_prompt_length]
+            elif self.truncation == "middle":
+                left_half = self.max_prompt_length // 2
+                right_half = self.max_prompt_length - left_half
+                raw_prompt_ids = raw_prompt_ids[:left_half] + raw_prompt_ids[-right_half:]
+            elif self.truncation == "error":
+                raise RuntimeError(
+                    f"Prompt length {len(raw_prompt_ids)} is longer than {self.max_prompt_length}."
+                )
+
         uid = row.get("uid", row.get("id", f"{Path(row['_data_file']).stem}_{row['_local_idx']}"))
 
         multi_modal_inputs = {
@@ -339,7 +358,7 @@ class QwenVLRewardDataset(Dataset):
             if key not in {"input_ids", "attention_mask"}
         }
         multi_modal_inputs.setdefault("video_grid_thw", full_video_grid_thw)
-        multi_modal_inputs.setdefault("second_per_grid_ts", second_per_grid_ts)
+        multi_modal_inputs.pop("second_per_grid_ts", None)
 
         video_sample_fps_list = [sample_fps] * len(resolved_videos)
         extra_info = dict(row.get("extra_info", {}))
