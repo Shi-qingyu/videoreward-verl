@@ -49,8 +49,6 @@ python3 -u -m verl.trainer.main_ppo \
     data.val_files="['${EVAL_FILE}']" \
     data.max_prompt_length=${MAX_PROMPT_LENGTH} \
     data.max_response_length=${MAX_RESPONSE_LENGTH} \
-    data.max_pixels=512 \
-    data.min_pixels=256 \
     data.train_batch_size=${TRAIN_BATCH_SIZE} \
     data.prompt_key=prompt \
     data.return_raw_chat=True \

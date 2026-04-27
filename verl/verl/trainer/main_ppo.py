@@ -326,8 +326,6 @@ class TaskRunner:
 
         resource_pool_manager = self.init_resource_pool_mgr(config)
 
-        from verl.utils.dataset.rl_dataset import collate_fn
-
         # Create training and validation datasets.
         train_dataset = create_rl_dataset(
             config.data.train_files,
@@ -346,6 +344,7 @@ class TaskRunner:
             max_samples=config.data.get("val_max_samples", -1),
         )
         train_sampler = create_rl_sampler(config.data, train_dataset)
+        collate_fn = create_rl_collate_fn(train_dataset)
 
         # breakpoint()
 
@@ -419,6 +418,12 @@ def create_rl_dataset(data_paths, data_config, tokenizer, processor, is_train=Tr
     )
 
     return dataset
+
+
+def create_rl_collate_fn(dataset):
+    from verl.utils.dataset.rl_dataset import collate_fn as default_collate_fn
+
+    return getattr(dataset, "collate_fn", default_collate_fn)
 
 
 def create_rl_sampler(data_config, dataset):
